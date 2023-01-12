@@ -16,14 +16,6 @@ services:
     volumes:
       - dest-db-volume:/var/lib/postgresql/data
       - dest-scripts-volume:/home/biuser/scripts
-  jupyter:
-    image: "jupyter/pyspark-notebook:latest"
-    container_name: jupyter-container
-    user: root
-    ports:
-      - "8888:8888"
-    volumes:
-      - "./Docker-containers/jupyter:/home/jovyan/work"
 volumes:
   source-db-volume:
   source-scripts-volume:
