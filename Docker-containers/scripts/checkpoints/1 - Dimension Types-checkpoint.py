@@ -1,3 +1,8 @@
+"""
+This script manages DML queries on dvd rental database tables by PySpark library in order to cover the checkpoint activity of Database Dimensional types topics of
+bi fundamentals course (https://github.corp.globant.com/big-data-studio/bi-fundamentals/blob/master/Course-Material/3-DWH/DWH_Index.md). 
+"""
+
 #Dimension Types Notebook
 
 #Load libraries and set general variables
@@ -12,21 +17,14 @@ import os
 os.environ['PYSPARK_SUBMIT_ARGS'] = '--jars file:////home/jovyan/work/postgresql-42.2.14.jar pyspark-shell'
 
 #Create SparkSession
-scSpark = SparkSession\
-        .builder\
-        .appName("dimension_types") \
-        .getOrCreate()
+scSpark = SparkSession.builder.appName("dimension_types").getOrCreate()
 
 # Other option to create the SparkSession
 jardrv = "~/drivers/postgresql-42.2.14.jar"
 
 #Create SparkSession
-scSpark2 = SparkSession\
-        .builder\
-        .appName("dimension_types")\
-        .config('spark.driver.extraClassPath',
-                jardrv)\
-        .getOrCreate()
+scSpark2 = SparkSession.builder.appName("dimension_types").config('spark.driver.extraClassPath',
+                jardrv).getOrCreate()
     
 # create properties
 properties={"user": "postgres", "password": "postgres", "driver":"org.postgresql.Driver"}
@@ -47,10 +45,7 @@ The advantage of natural keys is that they exist already, you don't need to intr
 
 #let's read theh customer table
 
-jdbc_customer = scSpark.read \
-    .jdbc(url_source, 
-         "public.customer",
-         properties=properties)
+jdbc_customer = scSpark.read.jdbc(url_source, "public.customer", properties=properties)
 
 # let's check the schema
 jdbc_customer.printSchema()
@@ -67,9 +62,7 @@ customer_target = scSpark.sql("select *,now() as load_date  from source_customer
 
 # Let's do it 4 times to duplicate data
 for i in range (0,3):
-    customer_target.write \
-        .mode('append') \
-        .jdbc(url=url_target, table="public.stg_dim_customer",properties=properties)
+    customer_target.write.mode('append').jdbc(url=url_target, table="public.stg_dim_customer",properties=properties)
     
     #wait 3 sec for generating diff load_date
     time.sleep(3)
@@ -92,9 +85,7 @@ select *
 
 """
 A single physical dimension can be referenced multiple times in a fact table, with each reference linking to a logically distinct role for the dimension. . This is most commonly seen in dimensions such as Time and Customer. We can see that also in city/province/country dimensions.
-"""
-
- """ 
+ 
  create table public.dim_date AS
 SELECT	
 	to_char(datum,'YYYYMMDD') as Date,
@@ -201,10 +192,7 @@ A **junk dimension** combines *several low-cardinality flags and attributes into
 #Load category, language y film
 
 # read category
-jdbc_category = scSpark.read \
-    .jdbc(url_source, 
-         "public.category",
-         properties=properties)
+jdbc_category = scSpark.read.jdbc(url_source,"public.category",properties=properties)
 
 # Create temp table for using spark sql
 jdbc_category.createOrReplaceTempView("source_category")
@@ -212,18 +200,13 @@ category_target = scSpark.sql("select *,now() as load_date  from source_category
 
 # write category
 for i in range (1,4):
-    category_target.write \
-            .mode('append') \
-            .jdbc(url=url_target, table="public.stg_dim_category",properties=properties)
+    category_target.write.mode('append').jdbc(url=url_target, table="public.stg_dim_category",properties=properties)
     
     #wait 2 sec for enerating diff load_date
     time.sleep(2)
 
 # read language
-jdbc_language = scSpark.read \
-    .jdbc(url_source, 
-         "public.language",
-         properties=properties)
+jdbc_language = scSpark.read.jdbc(url_source,"public.language",properties=properties)
 
 # Create temp table for using spark sql
 jdbc_language.createOrReplaceTempView("source_language")
@@ -231,18 +214,13 @@ language_target = scSpark.sql("select *,now() as load_date  from source_language
 
 # write category
 for i in range (1,3):
-    language_target.write \
-            .mode('append') \
-            .jdbc(url=url_target, table="public.stg_dim_language",properties=properties)
+    language_target.write.mode('append').jdbc(url=url_target, table="public.stg_dim_language",properties=properties)
     
     #wait 2 sec for enerating diff load_date
     time.sleep(2)
 
 # read film
-jdbc_film = scSpark.read \
-    .jdbc(url_source, 
-         "public.film",
-         properties=properties)
+jdbc_film = scSpark.read.jdbc(url_source,"public.film",properties=properties)
 
 # Create temp table for using spark sql
 jdbc_film.createOrReplaceTempView("source_film")
@@ -250,18 +228,13 @@ film_target = scSpark.sql("select *,now() as load_date  from source_film")
 
 # write category
 for i in range (0,3):
-    film_target.write \
-            .mode('append') \
-            .jdbc(url=url_target, table="public.stg_dim_film",properties=properties)
+    film_target.write.mode('append').jdbc(url=url_target, table="public.stg_dim_film",properties=properties)
     
     #wait 2 sec for enerating diff load_date
     time.sleep(2)
 
 # read film_category
-jdbc_film_category = scSpark.read \
-    .jdbc(url_source, 
-         "public.film_category",
-         properties=properties)
+jdbc_film_category = scSpark.read.jdbc(url_source,"public.film_category",properties=properties)
 
 # Create temp table for using spark sql
 jdbc_film_category.createOrReplaceTempView("source_film_category")
@@ -269,9 +242,7 @@ film_category_target = scSpark.sql("select *,now() as load_date  from source_fil
 
 # write category
 for i in range (0,3):
-    film_category_target.write \
-            .mode('append') \
-            .jdbc(url=url_target, table="public.stg_dim_film_category",properties=properties)
+    film_category_target.write.mode('append').jdbc(url=url_target, table="public.stg_dim_film_category",properties=properties)
     
     #wait 2 sec for enerating diff load_date
     time.sleep(2)
@@ -311,17 +282,13 @@ tweets_target = scSpark.sql(" SELECT CAST(tweet_id AS STRING) tweet_id , sentime
                                tweet_coord, tweet_created, user_timezone, now() as load_date  from df_tweets")
 
 # write to table
-tweets_target.write \
-            .mode('append') \
-            .jdbc(url=url_target, table="public.fact_tweets",properties=properties)
+tweets_target.write.mode('append').jdbc(url=url_target, table="public.fact_tweets",properties=properties)
 
 # read_csv for conformed_customer
 df_conformed_customer = scSpark.read.format('csv').options(header= 'true').load('conformed_customer.csv')
 
 # write to table
-df_conformed_customer.write \
-            .mode('append') \
-            .jdbc(url=url_target, table="public.conformed_customer",properties=properties)
+df_conformed_customer.write.mode('append').jdbc(url=url_target, table="public.conformed_customer",properties=properties)
 
 """ 
 This query returns the number of tweets by sentiment that every user with rentals has made in Twitter
@@ -381,8 +348,7 @@ A Type 3 SCD stores two versions of values for certain selected level attributes
 # as we are merge address and customer, I need to load address to staging db
 
 # read address
-jdbc_address = scSpark.read \
-    .jdbc(url_source, 
+jdbc_address = scSpark.read.jdbc(url_source, 
          "public.address",
          properties=properties)
 
@@ -392,9 +358,7 @@ address_target = scSpark.sql("select *,now() as load_date  from source_address")
 
 # write category
 for i in range (1,4):
-    address_target.write \
-            .mode('append') \
-            .jdbc(url=url_target, table="public.stg_dim_address",properties=properties)
+    address_target.write.mode('append').jdbc(url=url_target, table="public.stg_dim_address",properties=properties)
     
     #wait 2 sec for enerating diff load_date
     time.sleep(2)
@@ -402,18 +366,12 @@ for i in range (1,4):
 ### get recent_staging_records #####
 
 # read customer from  staging DB
-jdbc_staging_customer = scSpark.read \
-    .jdbc(url_target, 
-         "public.stg_dim_customer",
-         properties=properties)
+jdbc_staging_customer = scSpark.read.jdbc(url_target,"public.stg_dim_customer",properties=properties)
 
 jdbc_staging_customer.createOrReplaceTempView("stg_dim_customer")
 
 # read address from  staging DB
-jdbc_staging_address = scSpark.read \
-    .jdbc(url_target, 
-         "public.stg_dim_address",
-         properties=properties)
+jdbc_staging_address = scSpark.read.jdbc(url_target,"public.stg_dim_address",properties=properties)
 
 jdbc_staging_address.createOrReplaceTempView("stg_dim_address")
 
@@ -445,9 +403,7 @@ WHERE a.row_num = 1
 
 df_first_customer_records = scSpark.sql(first_customer_records)
 
-df_first_customer_records.write \
-            .mode('overwrite') \
-            .jdbc(url=url_dwh_target, table="public.dim_customer",properties=properties)
+df_first_customer_records.write.mode('overwrite').jdbc(url=url_dwh_target, table="public.dim_customer",properties=properties)
 
 df_first_customer_records.createOrReplaceTempView("recent_staging_records")
 # ############## review dataset ############## #
@@ -506,10 +462,7 @@ df_first_customer_records.filter(df_first_customer_records.customer_id == 5).sho
 
 
 # read SCD2 
-jdbc_customer_dim = scSpark.read \
-    .jdbc(url_dwh_target, 
-         "public.dim_customer",
-         properties=properties)
+jdbc_customer_dim = scSpark.read.jdbc(url_dwh_target,"public.dim_customer",properties=properties)
 
 # Create temp table for using spark sql
 jdbc_customer_dim.createOrReplaceTempView("current_scd2")
@@ -725,15 +678,10 @@ df_backup_scd2 = df_new_scd2
 df_backup_scd2.select(['customer_dim_id']).orderBy("customer_dim_id",ascending=False).show(3, False)
 
 #test write temporal_scd2 table with backup
-df_backup_scd2.write \
-              .mode("overwrite") \
-              .jdbc(url=url_dwh_target, table = "public.temporal_scd2", properties=properties)
+df_backup_scd2.write.mode("overwrite").jdbc(url=url_dwh_target, table = "public.temporal_scd2", properties=properties)
 
 # read temporal table
-df_temporal_scd2 = scSpark.read \
-    .jdbc(url_dwh_target, 
-         "public.temporal_scd2",
-         properties=properties)
+df_temporal_scd2 = scSpark.read.jdbc(url_dwh_target,"public.temporal_scd2",properties=properties)
 
 #write dimension with the backup info
 df_temporal_scd2.write \

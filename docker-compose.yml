@@ -16,6 +16,14 @@ services:
     volumes:
       - dest-db-volume:/var/lib/postgresql/data
       - dest-scripts-volume:/home/biuser/scripts
+  python:
+    image: "python:latest"
+    container_name: python
+    ports:
+      - "8000:8000"
+    tty: True
+    volumes:
+      - "./Docker-containers/scripts:/home/jovyan/work"
 volumes:
   source-db-volume:
   source-scripts-volume:

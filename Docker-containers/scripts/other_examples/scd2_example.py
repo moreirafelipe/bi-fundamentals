@@ -1,15 +1,15 @@
+"""
+This script manages DML queries on dvd rental database tables by PySpark library in order to cover the topics of
+bi-fundamentals course (https://github.corp.globant.com/big-data-studio/bi-fundamentals/blob/master/Course-Material/3-DWH/DWH_Index.md). 
+"""
+
 from pyspark.sql import SparkSession
 #Include jar to avoid error: java.sql.SQLException: No suitable driver
 import os
 os.environ['PYSPARK_SUBMIT_ARGS'] = '--jars file:////home/jovyan/work/postgresql-42.2.14.jar pyspark-shell'
 
-spark = SparkSession.builder.appName("scd2_demo").getOrCreate()
-
 #Create SparkSession
-spark = SparkSession\
-        .builder\
-        .appName("scd2_demo") \
-        .getOrCreate()
+spark = SparkSession.builder.appName("scd2_demo").getOrCreate()
 
 # create properties
 properties={"user": "postgres", "password": "postgres", "driver":"org.apostgresql.Driver"}
@@ -19,60 +19,61 @@ url_target = 'jdbc:postgresql://dest-db-container:5432/dvdrental_staging'
 url_dwh_target = 'jdbc:postgresql://dest-db-container:5432/dvdrental_dwh'
 
 # ############## generate current_scd2 dataset ############## #
-hd_current_scd2 = """
- SELECT   BIGINT(1) AS customer_dim_key,
-          STRING('John') AS first_name,
-          STRING('Smith') AS last_name,
-          STRING('G') AS middle_initial,
-          STRING('123 Main Street') AS address,
-          STRING('Springville') AS city,
-          STRING('VT') AS state,
-          STRING('01234-5678') AS zip_code,
-          BIGINT(289374) AS customer_number,
-          DATE('2014-01-01') AS eff_start_date,
-          DATE('9999-12-31') AS eff_end_date,
-          BOOLEAN(1) AS is_current
- UNION
- SELECT   BIGINT(2) AS customer_dim_key,
-          STRING('Susan') AS first_name,
-          STRING('Jones') AS last_name,
-          STRING('L') AS middle_initial,
-          STRING('987 Central Avenue') AS address,
-          STRING('Central City') AS city,
-          STRING('MO') AS state,
-          STRING('49257-2657') AS zip_code,
-          BIGINT(862447) AS customer_number,
-          DATE('2015-03-23') AS eff_start_date,
-          DATE('2018-11-17') AS eff_end_date,
-          BOOLEAN(0) AS is_current
- UNION
- SELECT   BIGINT(3) AS customer_dim_key,
-          STRING('Susan') AS first_name,
-          STRING('Harris') AS last_name,
-          STRING('L') AS middle_initial,
-          STRING('987 Central Avenue') AS address,
-          STRING('Central City') AS city,
-          STRING('MO') AS state,
-          STRING('49257-2657') AS zip_code,
-          BIGINT(862447) AS customer_number,
-          DATE('2018-11-18') AS eff_start_date,
-          DATE('9999-12-31') AS eff_end_date,
-          BOOLEAN(1) AS is_current
- UNION
- SELECT   BIGINT(4) AS customer_dim_key,
-          STRING('William') AS first_name,
-          STRING('Chase') AS last_name,
-          STRING('X') AS middle_initial,
-          STRING('57895 Sharp Way') AS address,
-          STRING('Oldtown') AS city,
-          STRING('CA') AS state,
-          STRING('98554-1285') AS zip_code,
-          BIGINT(31568) AS customer_number,
-          DATE('2018-12-07') AS eff_start_date,
-          DATE('9999-12-31') AS eff_end_date,
-          BOOLEAN(1) AS is_current
-"""
-df_current_scd2 = spark.sql(hd_current_scd2)
+df_current_scd2 = spark.sql(
+    """
+    SELECT   BIGINT(1) AS customer_dim_key,
+            STRING('John') AS first_name,
+            STRING('Smith') AS last_name,
+            STRING('G') AS middle_initial,
+            STRING('123 Main Street') AS address,
+            STRING('Springville') AS city,
+            STRING('VT') AS state,
+            STRING('01234-5678') AS zip_code,
+            BIGINT(289374) AS customer_number,
+            DATE('2014-01-01') AS eff_start_date,
+            DATE('9999-12-31') AS eff_end_date,
+            BOOLEAN(1) AS is_current
+    UNION
+    SELECT   BIGINT(2) AS customer_dim_key,
+            STRING('Susan') AS first_name,
+            STRING('Jones') AS last_name,
+            STRING('L') AS middle_initial,
+            STRING('987 Central Avenue') AS address,
+            STRING('Central City') AS city,
+            STRING('MO') AS state,
+            STRING('49257-2657') AS zip_code,
+            BIGINT(862447) AS customer_number,
+            DATE('2015-03-23') AS eff_start_date,
+            DATE('2018-11-17') AS eff_end_date,
+            BOOLEAN(0) AS is_current
+    UNION
+    SELECT   BIGINT(3) AS customer_dim_key,
+            STRING('Susan') AS first_name,
+            STRING('Harris') AS last_name,
+            STRING('L') AS middle_initial,
+            STRING('987 Central Avenue') AS address,
+            STRING('Central City') AS city,
+            STRING('MO') AS state,
+            STRING('49257-2657') AS zip_code,
+            BIGINT(862447) AS customer_number,
+            DATE('2018-11-18') AS eff_start_date,
+            DATE('9999-12-31') AS eff_end_date,
+            BOOLEAN(1) AS is_current
+    UNION
+    SELECT   BIGINT(4) AS customer_dim_key,
+            STRING('William') AS first_name,
+            STRING('Chase') AS last_name,
+            STRING('X') AS middle_initial,
+            STRING('57895 Sharp Way') AS address,
+            STRING('Oldtown') AS city,
+            STRING('CA') AS state,
+            STRING('98554-1285') AS zip_code,
+            BIGINT(31568) AS customer_number,
+            DATE('2018-12-07') AS eff_start_date,
+            DATE('9999-12-31') AS eff_end_date,
+            BOOLEAN(1) AS is_current
+    """
+)
 #df_current_scd2.write.mode('overwrite').jdbc(url=url_target, table="public.current_scd2",properties=properties)
 df_current_scd2.createOrReplaceTempView("current_scd2")
 # ############## review dataset ############## #
@@ -80,44 +81,45 @@ df_current_scd2.orderBy("customer_dim_key")
 df_current_scd2.show(10, False)
 
 # ############## generate customer_data dataset ############## #
-hd_customer_data = """
- SELECT   BIGINT(289374) AS customer_number,
-          STRING('John') AS first_name,
-          STRING('Smith') AS last_name,
-          STRING('G') AS middle_initial,
-          STRING('456 Derry Court') AS address,
-          STRING('Springville') AS city,
-          STRING('VT') AS state,
-          STRING('01234-5678') AS zip_code
- UNION
- SELECT   BIGINT(932574) AS customer_number,
-          STRING('Lisa') AS first_name,
-          STRING('Cohen') AS last_name,
-          STRING('S') AS middle_initial,
-          STRING('69846 Mason Road') AS address,
-          STRING('Atlanta') AS city,
-          STRING('GA') AS state,
-          STRING('26584-3591') AS zip_code
- UNION
- SELECT   BIGINT(862447) AS customer_number,
-          STRING('Susan') AS first_name,
-          STRING('Harris') AS last_name,
-          STRING('L') AS middle_initial,
-          STRING('987 Central Avenue') AS address,
-          STRING('Central City') AS city,
-          STRING('MO') AS state,
-          STRING('49257-2657') AS zip_code
- UNION
- SELECT   BIGINT(31568) AS customer_number,
-          STRING('William') AS first_name,
-          STRING('Chase') AS last_name,
-          STRING('X') AS middle_initial,
-          STRING('57895 Sharp Way') AS address,
-          STRING('Oldtown') AS city,
-          STRING('CA') AS state,
-          STRING('98554-1285') AS zip_code
-"""
-df_customer_data= spark.sql(hd_customer_data)
+df_customer_data= spark.sql(
+    """
+    SELECT   BIGINT(289374) AS customer_number,
+            STRING('John') AS first_name,
+            STRING('Smith') AS last_name,
+            STRING('G') AS middle_initial,
+            STRING('456 Derry Court') AS address,
+            STRING('Springville') AS city,
+            STRING('VT') AS state,
+            STRING('01234-5678') AS zip_code
+    UNION
+    SELECT   BIGINT(932574) AS customer_number,
+            STRING('Lisa') AS first_name,
+            STRING('Cohen') AS last_name,
+            STRING('S') AS middle_initial,
+            STRING('69846 Mason Road') AS address,
+            STRING('Atlanta') AS city,
+            STRING('GA') AS state,
+            STRING('26584-3591') AS zip_code
+    UNION
+    SELECT   BIGINT(862447) AS customer_number,
+            STRING('Susan') AS first_name,
+            STRING('Harris') AS last_name,
+            STRING('L') AS middle_initial,
+            STRING('987 Central Avenue') AS address,
+            STRING('Central City') AS city,
+            STRING('MO') AS state,
+            STRING('49257-2657') AS zip_code
+    UNION
+    SELECT   BIGINT(31568) AS customer_number,
+            STRING('William') AS first_name,
+            STRING('Chase') AS last_name,
+            STRING('X') AS middle_initial,
+            STRING('57895 Sharp Way') AS address,
+            STRING('Oldtown') AS city,
+            STRING('CA') AS state,
+            STRING('98554-1285') AS zip_code
+    """
+)
 #df_customer_data.coalesce(1).write.mode("overwrite").parquet(v_s3_path + "/customer_data/")
 df_customer_data.createOrReplaceTempView("customer_data")
 # ############## review dataset ############## 
@@ -125,33 +127,34 @@ df_customer_data.createOrReplaceTempView("customer_data")
 df_customer_data.show(10, False)
 
 # ############## create new current recs dataaset ############## #
-hd_new_curr_recs = """
- SELECT   t.customer_dim_key,
-          s.customer_number,
-          s.first_name,
-          s.last_name,
-          s.middle_initial,
-          s.address,
-          s.city,
-          s.state,
-          s.zip_code,
-          DATE(FROM_UTC_TIMESTAMP(CURRENT_TIMESTAMP, 'EST'))
-              AS eff_start_date,
-          DATE('9999-12-31') AS eff_end_date,
-          BOOLEAN(1) AS is_current
- FROM     customer_data s
-          INNER JOIN current_scd2 t
-              ON t.customer_number = s.customer_number
-              AND t.is_current = True
- WHERE    NVL(s.first_name, '') <> NVL(t.first_name, '')
-          OR NVL(s.last_name, '') <> NVL(t.last_name, '')
-          OR NVL(s.middle_initial, '') <> NVL(t.middle_initial, '')
-          OR NVL(s.address, '') <> NVL(t.address, '')
-          OR NVL(s.city, '') <> NVL(t.city, '')
-          OR NVL(s.state, '') <> NVL(t.state, '')
-          OR NVL(s.zip_code, '') <> NVL(t.zip_code, '')
-"""
-df_new_curr_recs = spark.sql(hd_new_curr_recs)
+df_new_curr_recs = spark.sql(
+    """
+    SELECT   t.customer_dim_key,
+            s.customer_number,
+            s.first_name,
+            s.last_name,
+            s.middle_initial,
+            s.address,
+            s.city,
+            s.state,
+            s.zip_code,
+            DATE(FROM_UTC_TIMESTAMP(CURRENT_TIMESTAMP, 'EST'))
+                AS eff_start_date,
+            DATE('9999-12-31') AS eff_end_date,
+            BOOLEAN(1) AS is_current
+    FROM     customer_data s
+            INNER JOIN current_scd2 t
+                ON t.customer_number = s.customer_number
+                AND t.is_current = True
+    WHERE    NVL(s.first_name, '') <> NVL(t.first_name, '')
+            OR NVL(s.last_name, '') <> NVL(t.last_name, '')
+            OR NVL(s.middle_initial, '') <> NVL(t.middle_initial, '')
+            OR NVL(s.address, '') <> NVL(t.address, '')
+            OR NVL(s.city, '') <> NVL(t.city, '')
+            OR NVL(s.state, '') <> NVL(t.state, '')
+            OR NVL(s.zip_code, '') <> NVL(t.zip_code, '')
+    """
+)
 #df_new_curr_recs.coalesce(1).write.mode("overwrite").parquet(v_s3_path + "/new_curr_recs/")
 df_new_curr_recs.createOrReplaceTempView("new_curr_recs")
 # ############## review dataset ############## #
@@ -166,27 +169,28 @@ df_modfied_keys.createOrReplaceTempView("modfied_keys")
 df_modfied_keys.show()
 
 # ############## create new hist recs dataaset ############## #
-hd_new_hist_recs = """
- SELECT   t.customer_dim_key,
-          t.customer_number,
-          t.first_name,
-          t.last_name,
-          t.middle_initial,
-          t.address,
-          t.city,
-          t.state,
-          t.zip_code,
-          t.eff_start_date,
-          DATE_SUB(
-              DATE(FROM_UTC_TIMESTAMP(CURRENT_TIMESTAMP, 'EST')), 1
-          ) AS eff_end_date,
-          BOOLEAN(0) AS is_current
- FROM     current_scd2 t
-          INNER JOIN modfied_keys k
-              ON k.customer_dim_key = t.customer_dim_key
- WHERE    t.is_current = True
-"""
-df_new_hist_recs = spark.sql(hd_new_hist_recs)
+df_new_hist_recs = spark.sql(
+    """
+    SELECT   t.customer_dim_key,
+            t.customer_number,
+            t.first_name,
+            t.last_name,
+            t.middle_initial,
+            t.address,
+            t.city,
+            t.state,
+            t.zip_code,
+            t.eff_start_date,
+            DATE_SUB(
+                DATE(FROM_UTC_TIMESTAMP(CURRENT_TIMESTAMP, 'EST')), 1
+            ) AS eff_end_date,
+            BOOLEAN(0) AS is_current
+    FROM     current_scd2 t
+            INNER JOIN modfied_keys k
+                ON k.customer_dim_key = t.customer_dim_key
+    WHERE    t.is_current = True
+    """
+)
 #df_new_hist_recs.coalesce(1).write.mode("overwrite").parquet(v_s3_path + "/new_hist_recs/")
 df_new_hist_recs.createOrReplaceTempView("new_hist_recs")
 # ############## review dataset ############## #
@@ -194,25 +198,26 @@ df_new_hist_recs.createOrReplaceTempView("new_hist_recs")
 df_new_hist_recs.show(10, False)
 
 # ############## create unaffected recs dataset ############## #
-hd_unaffected_recs = """
- SELECT   s.customer_dim_key,
-          s.customer_number,
-          s.first_name,
-          s.last_name,
-          s.middle_initial,
-          s.address,
-          s.city,
-          s.state,
-          s.zip_code,
-          s.eff_start_date,
-          s.eff_end_date,
-          s.is_current
- FROM     current_scd2 s
-          LEFT OUTER JOIN modfied_keys k
-              ON k.customer_dim_key = s.customer_dim_key
- WHERE    k.customer_dim_key IS NULL
-"""
-df_unaffected_recs = spark.sql(hd_unaffected_recs)
+df_unaffected_recs = spark.sql(
+    """
+    SELECT   s.customer_dim_key,
+            s.customer_number,
+            s.first_name,
+            s.last_name,
+            s.middle_initial,
+            s.address,
+            s.city,
+            s.state,
+            s.zip_code,
+            s.eff_start_date,
+            s.eff_end_date,
+            s.is_current
+    FROM     current_scd2 s
+            LEFT OUTER JOIN modfied_keys k
+                ON k.customer_dim_key = s.customer_dim_key
+    WHERE    k.customer_dim_key IS NULL
+    """
+)
 #df_unaffected_recs.coalesce(1).write.mode("overwrite").parquet(v_s3_path + "/unaffected_recs/")
 df_unaffected_recs.createOrReplaceTempView("unaffected_recs")
 # ############## review dataset ############## #
@@ -220,25 +225,26 @@ df_unaffected_recs.createOrReplaceTempView("unaffected_recs")
 df_unaffected_recs.orderBy("customer_number").show(10, False)
 
 # ############## create new recs dataset ############## #
-hd_new_cust = """
- SELECT   s.customer_number,
-          s.first_name,
-          s.last_name,
-          s.middle_initial,
-          s.address,
-          s.city,
-          s.state,
-          s.zip_code,
-          DATE(FROM_UTC_TIMESTAMP(CURRENT_TIMESTAMP, 'EST')) 
-              AS eff_start_date,
-          DATE('9999-12-31') AS eff_end_date,
-          BOOLEAN(1) AS is_current
- FROM     customer_data s
-          LEFT OUTER JOIN current_scd2 t
-              ON t.customer_number = s.customer_number
- WHERE    t.customer_number IS NULL
-"""
-df_new_cust = spark.sql(hd_new_cust)
+df_new_cust = spark.sql(
+    """
+    SELECT   s.customer_number,
+            s.first_name,
+            s.last_name,
+            s.middle_initial,
+            s.address,
+            s.city,
+            s.state,
+            s.zip_code,
+            DATE(FROM_UTC_TIMESTAMP(CURRENT_TIMESTAMP, 'EST')) 
+                AS eff_start_date,
+            DATE('9999-12-31') AS eff_end_date,
+            BOOLEAN(1) AS is_current
+    FROM     customer_data s
+            LEFT OUTER JOIN current_scd2 t
+                ON t.customer_number = s.customer_number
+    WHERE    t.customer_number IS NULL
+    """
+)
 #df_new_cust.coalesce(1).write.mode("overwrite").parquet(v_s3_path + "/new_cust/")
 df_new_cust.createOrReplaceTempView("new_cust")
 # ############## review dataset ############## #

@@ -302,8 +302,6 @@ Conformed dimensions are those dimensions which have been designed in such a way
 """
 
 #**Create customer tables**
-
- read_csv for tweets
 df_tweets = scSpark.read.format('csv').options(header= 'true').load('tweets.csv')
 
 # Create temp table for using spark sql
