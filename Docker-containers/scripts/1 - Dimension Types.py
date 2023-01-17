@@ -4,9 +4,11 @@
 # Import the libraries
 from pyspark.sql import SparkSession
 from datetime import datetime
+from pyspark.sql.window import Window
+from pyspark.sql.functions import row_number, coalesce, lit, col, current_timestamp, from_utc_timestamp, to_date
 import time
 
-from pyspark.sql.functions import current_timestamp
+from pyspark.sql.functions import col, current_timestamp
 
 #Include jar to avoid error: java.sql.SQLException: No suitable driver
 import os
@@ -317,9 +319,9 @@ df_tweets = scSpark.read.format('csv').options(header= 'true').load('tweets.csv'
 df_tweets.createOrReplaceTempView("df_tweets")
 
 # Modify fields
-tweets_target = scSpark.sql(" SELECT CAST(tweet_id AS STRING) tweet_id , sentiment, sentiment_confidence,\
-                               negativereason_confidence, name, retweet_count, \
-                               tweet_coord, tweet_created, user_timezone, now() as load_date  from df_tweets")
+tweets_target = df_tweets.select(col("tweet_id").cast("string").alias("tweet_id"), "sentiment", "sentiment_confidence", 
+                                 "negativereason_confidence", "name", "retweet_count", "tweet_coord", 
+                                 "tweet_created", "user_timezone", current_timestamp().alias("load_date"))
 
 # write to table
 tweets_target.write \
@@ -428,32 +430,14 @@ jdbc_staging_address = scSpark.read \
 jdbc_staging_address.createOrReplaceTempView("stg_dim_address")
 
 
-first_customer_records = """
-WITH recent_customer_staging_records AS(
-SELECT ROW_NUMBER () OVER (PARTITION BY customer_id  ORDER BY load_date DESC) AS row_num,
-       customer_id, first_name, last_name, email,  activebool, 
-       create_date, last_update, active, load_date, address_id 
-FROM stg_dim_customer
-),
-recent_address_staging_records as(
-SELECT ROW_NUMBER() OVER (PARTITION BY address_id ORDER BY load_date DESC) AS row_num,
-       address, address2, district, postal_code, phone,address_id 
-FROM stg_dim_address
-)
-SELECT ROW_NUMBER() OVER(ORDER BY customer_id ) AS customer_dim_id,customer_id, first_name, last_name, email, activebool,               
-       address, address2, district, postal_code, phone,
-       create_date, last_update, active ,
-       COALESCE (DATE(last_update) , create_date) AS valid_from,
-       DATE('9999-12-31') AS valid_to,
-       1 AS dim_active
-FROM recent_customer_staging_records c 
-JOIN recent_address_staging_records a
-  ON c.address_id = a.address_id
-WHERE a.row_num = 1
-  AND c.row_num = 1
-"""
+w_customer = Window.partitionBy("customer_id").orderBy(col("load_date").desc())
+w_address = Window.partitionBy("address_id").orderBy(col("load_date").desc())
 
-df_first_customer_records = scSpark.sql(first_customer_records)
+recent_customer_staging_records = jdbc_staging_customer.withColumn("row_num", row_number().over(w_customer))
+recent_address_staging_records = jdbc_staging_address.withColumn("row_num", row_number().over(w_address))
+
+df_first_customer_records = recent_customer_staging_records.filter("row_num = 1").join(recent_address_staging_records.filter("row_num = 1"), "address_id")\
+    .select(row_number().over(Window.orderBy("customer_id")).alias("customer_dim_id"), "customer_id", "first_name", "last_name", "email", "activebool", "address", "address2", "district", "postal_code", "phone", "create_date", "last_update", "active",coalesce(col("last_update").cast("date"), col("create_date")).alias("valid_from"),lit("9999-12-31").alias("valid_to"),lit(1).alias("dim_active"))
 
 df_first_customer_records.write \
             .mode('overwrite') \
@@ -532,33 +516,23 @@ jdbc_customer_dim.show(5)
 # ############## 1. Create new current records for existing customers ############## #
 # I should have one new record for Elizabeth Brown-Vazquez, customer_id 5
 
-df_new_curr_recs = scSpark.sql(
-
-  """
-  SELECT t.customer_dim_id, s.customer_id, s.first_name ,s.last_name, s.email, s.activebool,               
-        s.address, s.address2, s.district, s.postal_code, s.phone,
-        s.create_date, s.last_update, s.active ,
-        COALESCE (DATE(s.last_update) , DATE(s.create_date)) AS valid_from,
-        DATE('9999-12-31') AS valid_to,
-        1 AS dim_active        
-  FROM     recent_staging_records s
-          INNER JOIN current_scd2 t
-              ON t.customer_id = s.customer_id
-              AND CAST(t.dim_active AS STRING) = '1'
-  WHERE   NVL(s.first_name, '') <> NVL(t.first_name, '')
-        OR NVL(s.last_name, '') <> NVL(t.last_name, '')
-        OR NVL(s.email, '') <> NVL(t.email, '')          
-        OR NVL(s.address, '') <> NVL(t.address, '')
-        OR NVL(s.address2, '') <> NVL(t.address2, '')
-        OR NVL(s.district, '') <> NVL(t.district, '')
-        OR NVL(s.postal_code, '') <> NVL(t.postal_code, '')
-        OR NVL(s.phone, '') <> NVL(t.phone, '')
-  """
-)
+#Select only the rows where the values in the first_name, last_name, email, address, address2, district, postal_code and phone columns are different between recent_staging_records and current_scd2
+df_new_curr_recs = recent_customer_staging_records.join(current_scd2, on=["customer_id"], how="inner")\
+    .filter(col("dim_active") == 1)\
+    .filter(
+        (col("s.first_name") != col("t.first_name")) |
+        (col("s.last_name") != col("t.last_name")) |
+        (col("s.email") != col("t.email")) |
+        (col("s.address") != col("t.address")) |
+        (col("s.address2") != col("t.address2")) |
+        (col("s.district") != col("t.district")) |
+        (col("s.postal_code") != col("t.postal_code")) |
+        (col("s.phone") != col("t.phone"))
+    )\
+    .select("t.customer_dim_id", "s.customer_id", "s.first_name", "s.last_name", "s.email", "s.activebool", "s.address", "s.address2", "s.district", "s.postal_code", "s.phone", "s.create_date", "s.last_update", "s.active", when(col("s.last_update").isNotNull(), col("s.last_update").cast("date")).otherwise(col("s.create_date")).alias("valid_from"), lit("9999-12-31").alias("valid_to"), lit(1).alias("dim_active"))
 
 df_new_curr_recs.createOrReplaceTempView("new_curr_recs")
-# ############## review dataset ############## #
-
+#review dataset
 df_new_curr_recs.orderBy("customer_id").show(3, False)
 
 # ########### 2. Find previous current records to expire  ########
@@ -571,76 +545,74 @@ df_modfied_keys.show()
 # ############## create new hist recs dataset ############## #
 # we should have the modified register as expired
 
-df_new_hist_recs = scSpark.sql(
-    """
-  SELECT   t.customer_dim_id, t.customer_id, t.first_name, t.last_name, 
-            t.email, t.activebool, t.address, t.address2, t.district, 
-            t.postal_code, t.phone, t.create_date, t.last_update, t.active, 
-            DATE(t.valid_from) AS valid_from ,
-            DATE(FROM_UTC_TIMESTAMP(CURRENT_TIMESTAMP, 'EST')) AS valid_to,
-            '0' AS dim_active  -- here we expire
-  FROM     current_scd2 t
-            INNER JOIN modfied_keys k
-                ON k.customer_dim_id = t.customer_dim_id
-  WHERE    t.dim_active = '1'
-  """
+# Get the columns we need from the current_scd2 dataframe
+df_new_hist_recs = current_scd2.select(
+    "customer_dim_id", "customer_id", "first_name", "last_name",
+    "email", "activebool", "address", "address2", "district",
+    "postal_code", "phone", "create_date", "last_update", "active",
+    to_date(col("valid_from"),"MM-dd-yyyy").alias("valid_from"),
+    to_date(from_utc_timestamp(current_timestamp(), "EST"), "MM-dd-yyyy").alias("valid_to"),
+    lit("0").alias("dim_active")  # expire the records
 )
 
-df_new_hist_recs.createOrReplaceTempView("new_hist_recs")
+# Join with the modified_keys dataframe on the customer_dim_id column
+df_new_hist_recs = df_new_hist_recs.join(
+    modified_keys, on="customer_dim_id", how="inner"
+)
 
-# ############## review dataset ############## #
+# Filter out records where dim_active is not 1
+df_new_hist_recs = df_new_hist_recs.filter(col("dim_active") == 1)
+
 df_new_hist_recs.show(3, False)
 
 # ############## 4. Isolate unaffected records  ################
 # ############## create unaffected recs dataset ############## #
 # row for customer_id 5 should not appear
 
-df_unaffected_recs = scSpark.sql(
-  """
- SELECT   t.customer_dim_id, t.customer_id, 
-          t.first_name, t.last_name, 
-          t.email, t.activebool, 
-          t.address, t.address2, 
-          t.district, t.postal_code, 
-          t.phone, t.create_date, 
-          t.last_update, t.active, 
-          t.valid_from ,t.valid_to,
-          t.dim_active
- FROM     current_scd2 t
-LEFT JOIN modfied_keys k
-       ON k.customer_dim_id = t.customer_dim_id
-    WHERE k.customer_dim_id IS NULL       
-"""
+# Get the columns we need from the current_scd2 dataframe
+df_unaffected_recs = current_scd2.select(
+    "customer_dim_id", "customer_id", "first_name", "last_name",
+    "email", "activebool", "address", "address2", "district",
+    "postal_code", "phone", "create_date", "last_update", "active",
+    "valid_from", "valid_to", "dim_active"
 )
-df_unaffected_recs.createOrReplaceTempView("unaffected_recs")
 
-# ############## review dataset ############## #
+# Left join with the modified_keys dataframe on the customer_dim_id column
+df_unaffected_recs = df_unaffected_recs.join(
+    modified_keys, on="customer_dim_id", how="left"
+)
+
+# Filter out records where customer_dim_id is not null
+df_unaffected_recs = df_unaffected_recs.filter(col("customer_dim_id").isNull())
+
 df_unaffected_recs.orderBy("customer_dim_id").show(6, False)
-
 ################ 5. Create records for new customers ######
 # ############## create new recs dataset ############## #
 # We should have the new record for Luka Doncic
-df_new_cust = scSpark.sql( 
-  """
-  SELECT s.customer_id, s.first_name, 
-          s.last_name, s.email, 
-          s.activebool,s.address, 
-          s.address2, s.district, 
-          s.postal_code, s.phone,
-          s.create_date, s.last_update, 
-          s.active ,
-          COALESCE (DATE(s.last_update) , DATE(s.create_date)) AS valid_from,
-          DATE('9999-12-31') AS valid_to,
-          1 AS dim_active        
-  FROM     recent_staging_records s
-  LEFT JOIN current_scd2 t
-        ON t.customer_id = s.customer_id
-      WHERE t.customer_id IS NULL
-  """
+# Get the columns we need from the recent_staging_records dataframe
+df_new_cust = recent_staging_records.select(
+    "customer_id", "first_name", "last_name", "email", "activebool",
+    "address", "address2", "district", "postal_code", "phone",
+    "create_date", "last_update", "active"
 )
-df_new_cust.createOrReplaceTempView("new_cust")
 
-# ############## review dataset ############## #
+# Left join with the current_scd2 dataframe on the customer_id column
+df_new_cust = df_new_cust.join(
+    current_scd2, on="customer_id", how="left"
+)
+
+# Filter out records where customer_id is not null
+df_new_cust = df_new_cust.filter(col("customer_id").isNull())
+
+# Add valid_from and valid_to columns
+df_new_cust = df_new_cust.withColumn("valid_from", 
+    coalesce(to_date(col("last_update"), "MM-dd-yyyy"), to_date(col("create_date"), "MM-dd-yyyy"))
+)
+
+df_new_cust = df_new_cust.withColumn("valid_to", lit("9999-12-31"))
+
+df_new_cust = df_new_cust.withColumn("dim_active", lit(1))
+
 df_new_cust.show(3, False)
 
 # Get max surrogate key
@@ -653,90 +625,31 @@ print (v_max_key)
 ################ 6. Combine the datasets for new SCD2 #########
 # ############## create new scd2 dataset ############## #
 
-# Query for creating the whole table
-hd_new_scd2 = """
- WITH a_cte
- AS   (
-        SELECT     x.customer_id, x.first_name, 
-                   x.last_name, x.email, 
-                   x.activebool, x.address, 
-                   x.address2, x.district, 
-                   x.postal_code, x.phone,
-                   x.create_date, x.last_update, 
-                   x.active , x.valid_from,
-                   x.valid_to , x.dim_active
-        FROM       new_cust x        
-        UNION ALL
-        SELECT     y.customer_id, y.first_name, 
-                   y.last_name, y.email, 
-                   y.activebool, y.address, 
-                   y.address2, y.district, 
-                   y.postal_code, y.phone,
-                   y.create_date, y.last_update, 
-                   y.active , y.valid_from,
-                   y.valid_to , y.dim_active
-        FROM       new_curr_recs y
-      )
-  ,   b_cte
-  AS  (
-        SELECT  ROW_NUMBER() OVER(ORDER BY a.valid_from)
-                    + BIGINT('{v_max_key}') AS customer_dim_id,
-                a.customer_id, a.first_name, 
-                a.last_name, a.email, 
-                a.activebool, a.address, 
-                a.address2, a.district, 
-                a.postal_code, a.phone,
-                a.create_date, a.last_update, 
-                a.active , a.valid_from,
-                a.valid_to , a.dim_active
-        FROM    a_cte a
-      )
-  SELECT  customer_dim_id, customer_id, 
-          first_name, 
-          last_name, email, 
-          activebool, address, 
-          address2, district, 
-          postal_code, phone,
-          create_date, last_update, 
-          active , valid_from, valid_to,
-          dim_active
-  FROM    b_cte
-  UNION ALL
-  SELECT  customer_dim_id, customer_id, 
-          first_name, 
-          last_name, email, 
-          activebool, address, 
-          address2, district, 
-          postal_code, phone,
-          create_date, last_update, 
-          active , valid_from,valid_to,
-          dim_active
-  FROM    unaffected_recs
-  UNION ALL
-  SELECT  customer_dim_id, customer_id, 
-          first_name, 
-          last_name, email, 
-          activebool, address, 
-          address2, district, 
-          postal_code, phone,
-          create_date, last_update, 
-          active , valid_from, valid_to,
-          dim_active
-  FROM    new_hist_recs
-"""
-df_new_scd2 = scSpark.sql(hd_new_scd2.replace("{v_max_key}", v_max_key))
+# Load new_cust and new_curr_recs dataframes
+df_new_cust = scSpark.read.format("csv").load("path/to/new_cust.csv")
+df_new_curr_recs = scSpark.read.format("csv").load("path/to/new_curr_recs.csv")
 
-#Insert into table
-#df_new_scd2.write \
-#        .mode('overwrite') \
-#        .jdbc(url=url_dwh_target, table="public.dim_customer",properties=properties)
-        
-#df_new_scd2.coalesce(1).write.csv("test_csd2.csv", header=True)
-# ############## review dataset ############## #
+# Union the two dataframes
+df_a_cte = df_new_cust.union(df_new_curr_recs)
 
-df_new_scd2.orderBy("customer_dim_id",ascending=False).show(3, False)
+# Add a customer_dim_id column using row_number and v_max_key
+df_b_cte = df_a_cte.select("*", F.row_number().over(F.orderBy("valid_from")).cast("bigint").alias("customer_dim_id"))
+df_b_cte = df_b_cte.withColumn("customer_dim_id", F.col("customer_dim_id") + v_max_key)
 
-# Create a backup just so
+# Load unaffected_recs and new_hist_recs dataframes
+df_unaffected_recs = scSpark.read.format("csv").load("path/to/unaffected_recs.csv")
+df_new_hist_recs = scSpark.read.format("csv").load("path/to/new_hist_recs.csv")
+
+# Union the three dataframes
+df_new_scd2 = df_b_cte.union(df_unaffected_recs).union(df_new_hist_recs)
+
+# Order the resulting dataframe by customer_dim_id in descending order
+df_new_scd2 = df_new_scd2.orderBy("customer_dim_id", ascending=False)
+
+# Show the first 3 rows of the resulting dataframe
+df_new_scd2.show(3, False)
+
+# Create a backup
 df_backup_scd2 = df_new_scd2
 
 #Check backup  

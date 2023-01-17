@@ -73,30 +73,30 @@ df_customer_data.show(10, False)
 # ############## create new current recs dataaset ############## #
 df_new_curr_recs = spark.sql(
     """
-    SELECT   t.customer_dim_key,
-            s.customer_number,
-            s.first_name,
-            s.last_name,
-            s.middle_initial,
-            s.address,
-            s.city,
-            s.state,
-            s.zip_code,
+    SELECT   current_scd2.customer_dim_key,
+            customer_data.customer_number,
+            customer_data.first_name,
+            customer_data.last_name,
+            customer_data.middle_initial,
+            customer_data.address,
+            customer_data.city,
+            customer_data.state,
+            customer_data.zip_code,
             DATE(FROM_UTC_TIMESTAMP(CURRENT_TIMESTAMP, 'EST'))
                 AS eff_start_date,
             DATE('9999-12-31') AS eff_end_date,
             BOOLEAN(1) AS is_current
-    FROM     customer_data s
-            INNER JOIN current_scd2 t
-                ON t.customer_number = s.customer_number
-                AND t.is_current = True
-    WHERE    NVL(s.first_name, '') <> NVL(t.first_name, '')
-            OR NVL(s.last_name, '') <> NVL(t.last_name, '')
-            OR NVL(s.middle_initial, '') <> NVL(t.middle_initial, '')
-            OR NVL(s.address, '') <> NVL(t.address, '')
-            OR NVL(s.city, '') <> NVL(t.city, '')
-            OR NVL(s.state, '') <> NVL(t.state, '')
-            OR NVL(s.zip_code, '') <> NVL(t.zip_code, '')
+    FROM     customer_data customer_data
+            INNER JOIN current_scd2 current_scd2
+                ON current_scd2.customer_number = customer_data.customer_number
+                AND current_scd2.is_current = True
+    WHERE    NVL(customer_data.first_name, '') <> NVL(current_scd2.first_name, '')
+            OR NVL(customer_data.last_name, '') <> NVL(current_scd2.last_name, '')
+            OR NVL(customer_data.middle_initial, '') <> NVL(current_scd2.middle_initial, '')
+            OR NVL(customer_data.address, '') <> NVL(current_scd2.address, '')
+            OR NVL(customer_data.city, '') <> NVL(current_scd2.city, '')
+            OR NVL(customer_data.state, '') <> NVL(current_scd2.state, '')
+            OR NVL(customer_data.zip_code, '') <> NVL(current_scd2.zip_code, '')
     """
 )
 
@@ -114,24 +114,24 @@ df_modfied_keys.show()
 # ############## create new hist recs dataaset ############## #
 df_new_hist_recs = spark.sql(
     """
-    SELECT   t.customer_dim_key,
-            t.customer_number,
-            t.first_name,
-            t.last_name,
-            t.middle_initial,
-            t.address,
-            t.city,
-            t.state,
-            t.zip_code,
-            t.eff_start_date,
+    SELECT   current_scd2.customer_dim_key,
+            current_scd2.customer_number,
+            current_scd2.first_name,
+            current_scd2.last_name,
+            current_scd2.middle_initial,
+            current_scd2.address,
+            current_scd2.city,
+            current_scd2.state,
+            current_scd2.zip_code,
+            current_scd2.eff_start_date,
             DATE_SUB(
                 DATE(FROM_UTC_TIMESTAMP(CURRENT_TIMESTAMP, 'EST')), 1
             ) AS eff_end_date,
             BOOLEAN(0) AS is_current
-    FROM     current_scd2 t
-            INNER JOIN modfied_keys k
-                ON k.customer_dim_key = t.customer_dim_key
-    WHERE    t.is_current = True
+    FROM     current_scd2 current_scd2
+            INNER JOIN modfied_keys modfied_keys
+                ON modfied_keys.customer_dim_key = current_scd2.customer_dim_key
+    WHERE    current_scd2.is_current = True
     """
 )
 #df_new_hist_recs.coalesce(1).write.mode("overwrite").parquet(v_s3_path + "/new_hist_recs/")
@@ -143,22 +143,22 @@ df_new_hist_recs.show(10, False)
 # ############## create unaffected recs dataset ############## #
 df_unaffected_recs = spark.sql(
     """
-    SELECT   s.customer_dim_key,
-            s.customer_number,
-            s.first_name,
-            s.last_name,
-            s.middle_initial,
-            s.address,
-            s.city,
-            s.state,
-            s.zip_code,
-            s.eff_start_date,
-            s.eff_end_date,
-            s.is_current
-    FROM     current_scd2 s
-            LEFT OUTER JOIN modfied_keys k
-                ON k.customer_dim_key = s.customer_dim_key
-    WHERE    k.customer_dim_key IS NULL
+    SELECT   current_scd2.customer_dim_key,
+            current_scd2.customer_number,
+            current_scd2.first_name,
+            current_scd2.last_name,
+            current_scd2.middle_initial,
+            current_scd2.address,
+            current_scd2.city,
+            current_scd2.state,
+            current_scd2.zip_code,
+            current_scd2.eff_start_date,
+            current_scd2.eff_end_date,
+            current_scd2.is_current
+    FROM     current_scd2 current_scd2
+            LEFT OUTER JOIN modfied_keys modfied_keys
+                ON modfied_keys.customer_dim_key = current_scd2.customer_dim_key
+    WHERE    modfied_keys.customer_dim_key IS NULL
     """
 )
 #df_unaffected_recs.coalesce(1).write.mode("overwrite").parquet(v_s3_path + "/unaffected_recs/")
@@ -170,22 +170,22 @@ df_unaffected_recs.orderBy("customer_number").show(10, False)
 # ############## create new recs dataset ############## #
 df_new_cust = spark.sql(
     """
-    SELECT   s.customer_number,
-            s.first_name,
-            s.last_name,
-            s.middle_initial,
-            s.address,
-            s.city,
-            s.state,
-            s.zip_code,
-            DATE(FROM_UTC_TIMESTAMP(CURRENT_TIMESTAMP, 'EST')) 
+    SELECT   customer_data.customer_number,
+            customer_data.first_name,
+            customer_data.last_name,
+            customer_data.middle_initial,
+            customer_data.address,
+            customer_data.city,
+            customer_data.state,
+            customer_data.zip_code,
+            DATE(FROM_UTC_TIMESTAMP(CURRENT_TIMESTAMP, 'EST'))
                 AS eff_start_date,
             DATE('9999-12-31') AS eff_end_date,
             BOOLEAN(1) AS is_current
-    FROM     customer_data s
-            LEFT OUTER JOIN current_scd2 t
-                ON t.customer_number = s.customer_number
-    WHERE    t.customer_number IS NULL
+    FROM     customer_data customer_data
+            LEFT OUTER JOIN current_scd2 current_scd2
+                ON current_scd2.customer_number = customer_data.customer_number
+    WHERE    current_scd2.customer_number IS NULL
     """
 )
 #df_new_cust.coalesce(1).write.mode("overwrite").parquet(v_s3_path + "/new_cust/")
@@ -203,30 +203,30 @@ print(v_max_key)
 hd_new_scd2 = """
  WITH a_cte
  AS   (
-        SELECT     x.first_name, x.last_name,
-                   x.middle_initial, x.address,
-                   x.city, x.state, x.zip_code,
-                   x.customer_number, x.eff_start_date,
-                   x.eff_end_date, x.is_current
-        FROM       new_cust x
+        SELECT     new_cust.first_name, new_cust.last_name,
+                   new_cust.middle_initial, new_cust.address,
+                   new_cust.city, new_cust.state, new_cust.zip_code,
+                   new_cust.customer_number, new_cust.eff_start_date,
+                   new_cust.eff_end_date, new_cust.is_current
+        FROM       new_cust new_cust
         UNION ALL
-        SELECT     y.first_name, y.last_name,
-                   y.middle_initial, y.address,
-                   y.city, y.state, y.zip_code,
-                   y.customer_number, y.eff_start_date,
-                   y.eff_end_date, y.is_current
-        FROM       new_curr_recs y
+        SELECT     new_curr_recs.first_name, new_curr_recs.last_name,
+                   new_curr_recs.middle_initial, new_curr_recs.address,
+                   new_curr_recs.city, new_curr_recs.state, new_curr_recs.zip_code,
+                   new_curr_recs.customer_number, new_curr_recs.eff_start_date,
+                   new_curr_recs.eff_end_date, new_curr_recs.is_current
+        FROM       new_curr_recs new_curr_recs
       )
   ,   b_cte
   AS  (
-        SELECT  ROW_NUMBER() OVER(ORDER BY a.eff_start_date)
+        SELECT  ROW_NUMBER() OVER(ORDER BY a_cte.eff_start_date)
                     + BIGINT('{v_max_key}') AS customer_dim_key,
-                a.first_name, a.last_name,
-                a.middle_initial, a.address,
-                a.city, a.state, a.zip_code,
-                a.customer_number, a.eff_start_date,
-                a.eff_end_date, a.is_current
-        FROM    a_cte a
+                a_cte.first_name, a_cte.last_name,
+                a_cte.middle_initial, a_cte.address,
+                a_cte.city, a_cte.state, a_cte.zip_code,
+                a_cte.customer_number, a_cte.eff_start_date,
+                a_cte.eff_end_date, a_cte.is_current
+        FROM    a_cte a_cte
       )
   SELECT  customer_dim_key, first_name, last_name,
           middle_initial, address,
